@@ -1,4 +1,6 @@
-const catalog = [
+// HDHub4u Catalog Module - SYNCHRONOUS VERSION for Rhino JS
+
+var catalog = [
   {
     title: "Latest",
     filter: ""
@@ -25,7 +27,7 @@ const catalog = [
   }
 ];
 
-const genres = [
+var genres = [
   {
     title: "Action",
     filter: "/category/action"
@@ -71,3 +73,11 @@ const genres = [
     filter: "/category/adventure"
   }
 ];
+
+function getCatalog() {
+  return catalog;
+}
+
+function getGenres() {
+  return genres;
+}
