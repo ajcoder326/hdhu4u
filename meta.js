@@ -134,10 +134,11 @@ function getMetaData(link, providerContext) {
       }
       // Check if it's a quality link (480p, 720p, 1080p, etc.)
       else if (sText.match(/480|720|1080|2160|4K/i)) {
+        var qMatch = sText.match(/\b(480p|720p|1080p|2160p|4K)\b/i);
         qualityLinks.push({
           title: sText,
           link: sHref,
-          quality: sText.match(/\b(480p|720p|1080p|2160p|4K)\b/i)?.[0] || ""
+          quality: qMatch ? qMatch[0] : ""
         });
       }
       // Check if it's a WATCH link (hubstream)
