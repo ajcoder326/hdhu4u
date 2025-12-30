@@ -123,7 +123,40 @@ function hubcloudExtractor(link) {
     var html = response.data;
     var $ = cheerio.load(html);
 
-    // Try to find redirect URL
+    // Check for gamerxyt.com/hubcloud.php pattern (new flow)
+    var gamerxytMatch = html.match(/var\s+url\s*=\s*['"]?(https:\/\/gamerxyt\.com\/hubcloud\.php[^'";\s]+)['"]?/);
+    if (gamerxytMatch) {
+      console.log("Found gamerxyt URL:", gamerxytMatch[1]);
+      // Fetch the gamerxyt page to get actual download links
+      try {
+        var gamerxytRes = axios.get(gamerxytMatch[1], { headers: headers });
+        var gamerxytHtml = gamerxytRes.data;
+        var $gamerxyt = cheerio.load(gamerxytHtml);
+        
+        // Look for download links on gamerxyt page
+        var gLinks = $gamerxyt('a[href*=".mkv"], a[href*="download"], a[href*="pixeld"], a[href*="cloudflarestorage"], a[href*="fastdl"], a[href*=".dev/"]');
+        console.log("Gamerxyt download links:", gLinks.length);
+        
+        for (var gi = 0; gi < gLinks.length; gi++) {
+          var gHref = gLinks.eq(gi).attr("href") || "";
+          var gText = gLinks.eq(gi).text().trim();
+          if (gHref && gHref.indexOf("http") === 0) {
+            var serverMatch = gHref.match(/^(?:https?:\/\/)?(?:www\.)?([^\/]+)/i);
+            var serverName = serverMatch ? serverMatch[1].replace(/\./g, " ") : "Download";
+            streamLinks.push({ server: gText || serverName, link: gHref, type: "mkv" });
+          }
+        }
+        
+        if (streamLinks.length > 0) {
+          console.log("streamLinks count:", streamLinks.length);
+          return streamLinks;
+        }
+      } catch (gErr) {
+        console.log("Gamerxyt fetch error:", gErr);
+      }
+    }
+
+    // Try to find redirect URL (original method)
     var vLinkMatch = html.match(/var\s+url\s*=\s*'([^']+)';/);
     var vLinkRedirect = vLinkMatch ? vLinkMatch[1] : "";
 
@@ -148,6 +181,28 @@ function hubcloudExtractor(link) {
     if (vcloudLink && vcloudLink.indexOf("/") === 0) {
       vcloudLink = baseUrl + vcloudLink;
       console.log("New vcloudLink:", vcloudLink);
+    }
+
+    // If vcloudLink is still the same as original, try different approach
+    if (vcloudLink === link) {
+      // Look for download buttons directly on this page
+      var directLinks = $('a[href*=".mkv"], a[href*="download"], a[href*="pixeld"], a.btn-success, a.btn-danger');
+      console.log("Direct links on page:", directLinks.length);
+      
+      for (var di = 0; di < directLinks.length; di++) {
+        var dHref = directLinks.eq(di).attr("href") || "";
+        var dText = directLinks.eq(di).text().trim();
+        if (dHref && dHref.indexOf("http") === 0) {
+          var sMatch = dHref.match(/^(?:https?:\/\/)?(?:www\.)?([^\/]+)/i);
+          var sName = sMatch ? sMatch[1].replace(/\./g, " ") : "Download";
+          streamLinks.push({ server: dText || sName, link: dHref, type: "mkv" });
+        }
+      }
+      
+      if (streamLinks.length > 0) {
+        console.log("streamLinks count:", streamLinks.length);
+        return streamLinks;
+      }
     }
 
     // Fetch the vcloud page
@@ -225,6 +280,48 @@ function hubcloudExtractor(link) {
 function getStream(link, type, providerContext) {
   try {
     console.log("HDHub4u getStream link:", link, "type:", type);
+
+    // Handle hdstream4u.com streaming links
+    if (link.indexOf("hdstream4u.com") !== -1) {
+      console.log("Processing hdstream4u link");
+      var streamRes = axios.get(link, { headers: headers });
+      var streamHtml = streamRes.data;
+      
+      // Look for stream URL pattern in HTML
+      var streamMatch = streamHtml.match(/file\s*:\s*["']([^"']+)["']/);
+      if (!streamMatch) {
+        streamMatch = streamHtml.match(/source\s*:\s*["']([^"']+)["']/);
+      }
+      if (!streamMatch) {
+        streamMatch = streamHtml.match(/(https?:\/\/[^"'\s]+\/stream\/[^"'\s]+)/);
+      }
+      
+      if (streamMatch) {
+        console.log("Found stream URL:", streamMatch[1]);
+        return [{
+          server: "HDStream",
+          link: streamMatch[1],
+          type: "m3u8"
+        }];
+      }
+      
+      // Fallback: return the page URL itself for the player to handle
+      return [{
+        server: "HDStream",
+        link: link,
+        type: "m3u8"
+      }];
+    }
+
+    // Handle hubstream.art links
+    if (link.indexOf("hubstream.art") !== -1) {
+      console.log("Processing hubstream link");
+      return [{
+        server: "HubStream",
+        link: link,
+        type: "m3u8"
+      }];
+    }
 
     var hubdriveLink = "";
 
