@@ -132,7 +132,15 @@ function hubcloudExtractor(link) {
       vcloudLink = decode(vLinkRedirect.split("r=")[1]);
     }
     if (!vcloudLink) {
-      vcloudLink = vLinkRedirect || $(".fa-file-download.fa-lg").parent().attr("href") || link;
+      var downloadIcon = $(".fa-file-download.fa-lg");
+      var parentHref = "";
+      if (downloadIcon.length > 0) {
+        var parentEl = downloadIcon.parent();
+        if (parentEl && parentEl.length > 0) {
+          parentHref = parentEl.attr("href") || "";
+        }
+      }
+      vcloudLink = vLinkRedirect || parentHref || link;
     }
 
     console.log("vcloudLink:", vcloudLink);
