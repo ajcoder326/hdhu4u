@@ -155,13 +155,32 @@ function hubcloudExtractor(link) {
     var vcloudHtml = vcloudRes.data;
     var $vcloud = cheerio.load(vcloudHtml);
 
-    // Extract download links from buttons
+    // Extract download links from buttons (old method)
     var buttons = $vcloud(".btn-success.btn-lg.h6, .btn-danger, .btn-secondary");
     console.log("Found buttons:", buttons.length);
 
-    for (var i = 0; i < buttons.length; i++) {
-      var element = buttons.eq(i);
+    // Also look for all anchor links with known hosts (new method for hblinks.dad)
+    var allLinks = $vcloud('a[href*="hubcloud"], a[href*="hubdrive"], a[href*="hubcdn"], a[href*="pixeld"], a[href*="fastdl"], a[href*=".dev/"], a[href*="cloudflarestorage"]');
+    console.log("Found all download links:", allLinks.length);
+
+    // Combine both sets
+    var allElements = [];
+    for (var bi = 0; bi < buttons.length; bi++) {
+      allElements.push(buttons.eq(bi));
+    }
+    for (var ai = 0; ai < allLinks.length; ai++) {
+      allElements.push(allLinks.eq(ai));
+    }
+
+    // Track already added links to avoid duplicates
+    var addedLinks = {};
+
+    for (var i = 0; i < allElements.length; i++) {
+      var element = allElements[i];
       var downloadLink = element.attr("href") || "";
+
+      if (!downloadLink || addedLinks[downloadLink]) continue;
+      addedLinks[downloadLink] = true;
 
       if (!downloadLink) continue;
 
@@ -179,13 +198,15 @@ function hubcloudExtractor(link) {
         streamLinks.push({ server: "Pixeldrain", link: downloadLink, type: "mkv" });
       } else if (downloadLink.indexOf("hubcloud") !== -1 || downloadLink.indexOf("/?id=") !== -1) {
         streamLinks.push({ server: "HubCloud", link: downloadLink, type: "mkv" });
+      } else if (downloadLink.indexOf("hubdrive") !== -1) {
+        streamLinks.push({ server: "HubDrive", link: downloadLink, type: "mkv" });
       } else if (downloadLink.indexOf("cloudflarestorage") !== -1) {
         streamLinks.push({ server: "CfStorage", link: downloadLink, type: "mkv" });
       } else if (downloadLink.indexOf("fastdl") !== -1 || downloadLink.indexOf("fsl.") !== -1) {
         streamLinks.push({ server: "FastDl", link: downloadLink, type: "mkv" });
       } else if (downloadLink.indexOf("hubcdn") !== -1 && downloadLink.indexOf("/?id=") === -1) {
         streamLinks.push({ server: "HubCdn", link: downloadLink, type: "mkv" });
-      } else if (downloadLink.indexOf(".mkv") !== -1) {
+      } else if (downloadLink.indexOf(".mkv") !== -1 || downloadLink.indexOf("/drive/") !== -1 || downloadLink.indexOf("/file/") !== -1) {
         var serverMatch = downloadLink.match(/^(?:https?:\/\/)?(?:www\.)?([^\/]+)/i);
         var serverName = serverMatch ? serverMatch[1].replace(/\./g, " ") : "Unknown";
         streamLinks.push({ server: serverName, link: downloadLink, type: "mkv" });
