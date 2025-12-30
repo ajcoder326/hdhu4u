@@ -1,7 +1,10 @@
+// HDHub4u Stream Module - SYNCHRONOUS VERSION for Rhino JS
+// Extracts streaming links from HubCloud/HubDrive
+
 var headers = {
   "Cookie": "xla=s4t",
   "Referer": "https://google.com",
-  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 };
 
 // Utility functions for decoding
@@ -21,7 +24,7 @@ function decode(value) {
 }
 
 function pen(value) {
-  return value.replace(/[a-zA-Z]/g, function(char) {
+  return value.replace(/[a-zA-Z]/g, function (char) {
     return String.fromCharCode(
       (char <= "Z" ? 90 : 122) >= (char = char.charCodeAt(0) + 13) ? char : char - 26
     );
@@ -29,7 +32,7 @@ function pen(value) {
 }
 
 function rot13(str) {
-  return str.replace(/[a-zA-Z]/g, function(char) {
+  return str.replace(/[a-zA-Z]/g, function (char) {
     var charCode = char.charCodeAt(0);
     var isUpperCase = char <= "Z";
     var baseCharCode = isUpperCase ? 65 : 97;
@@ -52,21 +55,21 @@ function decodeString(encryptedString) {
   }
 }
 
-// HubCloud extraction using axios only
-async function hubcloudExtractor(link) {
+// HubCloud extraction - SYNCHRONOUS
+function hubcloudExtractor(link) {
   try {
     console.log("hubcloudExtractor:", link);
     var baseUrl = link.split("/").slice(0, 3).join("/");
     var streamLinks = [];
-    
-    var response = await axios.get(link, { headers: headers });
+
+    var response = axios.get(link, { headers: headers });
     var html = response.data;
     var $ = cheerio.load(html);
-    
+
     // Try to find redirect URL
     var vLinkMatch = html.match(/var\s+url\s*=\s*'([^']+)';/);
     var vLinkRedirect = vLinkMatch ? vLinkMatch[1] : "";
-    
+
     var vcloudLink = "";
     if (vLinkRedirect && vLinkRedirect.indexOf("r=") !== -1) {
       vcloudLink = decode(vLinkRedirect.split("r=")[1]);
@@ -74,25 +77,29 @@ async function hubcloudExtractor(link) {
     if (!vcloudLink) {
       vcloudLink = vLinkRedirect || $(".fa-file-download.fa-lg").parent().attr("href") || link;
     }
-    
+
     console.log("vcloudLink:", vcloudLink);
-    
+
     if (vcloudLink && vcloudLink.indexOf("/") === 0) {
       vcloudLink = baseUrl + vcloudLink;
       console.log("New vcloudLink:", vcloudLink);
     }
-    
+
     // Fetch the vcloud page
-    var vcloudRes = await axios.get(vcloudLink, { headers: headers });
+    var vcloudRes = axios.get(vcloudLink, { headers: headers });
     var vcloudHtml = vcloudRes.data;
     var $vcloud = cheerio.load(vcloudHtml);
-    
+
     // Extract download links from buttons
-    $vcloud(".btn-success.btn-lg.h6, .btn-danger, .btn-secondary").each(function(i, element) {
-      var downloadLink = $vcloud(element).attr("href") || "";
-      
-      if (!downloadLink) return;
-      
+    var buttons = $vcloud(".btn-success.btn-lg.h6, .btn-danger, .btn-secondary");
+    console.log("Found buttons:", buttons.length);
+
+    for (var i = 0; i < buttons.length; i++) {
+      var element = buttons.eq(i);
+      var downloadLink = element.attr("href") || "";
+
+      if (!downloadLink) continue;
+
       // Classify by link type
       if (downloadLink.indexOf(".dev") !== -1 && downloadLink.indexOf("/?id=") === -1) {
         streamLinks.push({ server: "Cf Worker", link: downloadLink, type: "mkv" });
@@ -118,27 +125,27 @@ async function hubcloudExtractor(link) {
         var serverName = serverMatch ? serverMatch[1].replace(/\./g, " ") : "Unknown";
         streamLinks.push({ server: serverName, link: downloadLink, type: "mkv" });
       }
-    });
-    
-    console.log("streamLinks:", streamLinks.length);
+    }
+
+    console.log("streamLinks count:", streamLinks.length);
     return streamLinks;
   } catch (error) {
-    console.log("hubcloudExtractor error:", error);
+    console.error("hubcloudExtractor error:", error);
     return [];
   }
 }
 
-// Main stream extraction function
-async function getStream(link, type, providerContext) {
+// Main stream extraction function - SYNCHRONOUS
+function getStream(link, type, providerContext) {
   try {
     console.log("HDHub4u getStream link:", link, "type:", type);
-    
+
     var hubdriveLink = "";
     var streamLinks = [];
-    
+
     // Check if it's a hubdrive link directly
     if (link.indexOf("hubdrive") !== -1) {
-      var hubdriveRes = await axios.get(link, { headers: headers });
+      var hubdriveRes = axios.get(link, { headers: headers });
       var hubdriveText = hubdriveRes.data;
       var $ = cheerio.load(hubdriveText);
       hubdriveLink = $(".btn.btn-primary.btn-user.btn-success1.m-1").attr("href") || link;
@@ -147,21 +154,21 @@ async function getStream(link, type, providerContext) {
       hubdriveLink = link;
     } else {
       // Need to decode encrypted link from page
-      var res = await axios.get(link, { headers: headers });
+      var res = axios.get(link, { headers: headers });
       var text = res.data;
       var $ = cheerio.load(text);
-      
+
       // Try multiple methods to find download links
-      
+
       // Method 1: Direct hubcloud/hubdrive links on page
-      var directLink = $('a[href*="hubcloud"]').attr("href") || 
-                       $('a[href*="hubdrive"]').attr("href") ||
-                       $('a[href*="hubcdn"]').attr("href");
-      
+      var directLink = $('a[href*="hubcloud"]').attr("href") ||
+        $('a[href*="hubdrive"]').attr("href") ||
+        $('a[href*="hubcdn"]').attr("href");
+
       if (directLink) {
         hubdriveLink = directLink;
       }
-      
+
       // Method 2: Look for encoded links
       if (!hubdriveLink) {
         var encryptedParts = text.split("s('o','");
@@ -175,26 +182,26 @@ async function getStream(link, type, providerContext) {
           }
         }
       }
-      
+
       // Method 3: Find quality-based links
       if (!hubdriveLink) {
         hubdriveLink = $('a:contains("1080p")').attr("href") ||
-                       $('a:contains("720p")').attr("href") ||
-                       $('a:contains("480p")').attr("href") ||
-                       $('h3:contains("1080p")').find("a").attr("href");
+          $('a:contains("720p")').attr("href") ||
+          $('a:contains("480p")').attr("href") ||
+          $('h3:contains("1080p")').find("a").attr("href");
       }
-      
+
       if (!hubdriveLink) {
         console.log("No download link found");
         return [];
       }
     }
-    
+
     console.log("hubdriveLink:", hubdriveLink);
-    
+
     // If hubdrive, fetch it again to get final link
     if (hubdriveLink.indexOf("hubdrive") !== -1) {
-      var hubdriveRes2 = await axios.get(hubdriveLink, { headers: headers });
+      var hubdriveRes2 = axios.get(hubdriveLink, { headers: headers });
       var hubdriveText2 = hubdriveRes2.data;
       var $h = cheerio.load(hubdriveText2);
       var nextLink = $h(".btn.btn-primary.btn-user.btn-success1.m-1").attr("href");
@@ -202,25 +209,25 @@ async function getStream(link, type, providerContext) {
         hubdriveLink = nextLink;
       }
     }
-    
+
     // Get final hubcloud link from hubdrive page if needed
     if (hubdriveLink.indexOf("hubcloud") === -1 && hubdriveLink.indexOf("hubcdn") === -1) {
-      var hubdriveLinkRes = await axios.get(hubdriveLink, { headers: headers });
+      var hubdriveLinkRes = axios.get(hubdriveLink, { headers: headers });
       var hubcloudText = hubdriveLinkRes.data;
       var metaMatch = hubcloudText.match(/<META HTTP-EQUIV="refresh" content="0; url=([^"]+)">/i);
       if (metaMatch && metaMatch[1]) {
         hubdriveLink = metaMatch[1];
       }
     }
-    
+
     console.log("Final hubcloudLink:", hubdriveLink);
-    
+
     // Extract stream links from hubcloud
-    var streams = await hubcloudExtractor(hubdriveLink);
-    
+    var streams = hubcloudExtractor(hubdriveLink);
+
     return streams;
   } catch (error) {
-    console.log("HDHub4u getStream error:", error);
+    console.error("HDHub4u getStream error:", error);
     return [];
   }
 }
