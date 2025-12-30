@@ -114,6 +114,16 @@ function getMetaData(link, providerContext) {
     var shortenerLinks = $('a[href*="gadgetsweb.xyz"], a[href*="hubstream"], a[href*="hubdrive"], a[href*="hubcloud"], a[href*="hubcdn.fans"], a[href*="hdstream4u.com"]');
     console.log("Shortener links found:", shortenerLinks.length);
 
+    // Helper to determine link type based on URL
+    function getLinkType(url) {
+      if (url.indexOf("hubdrive.space") !== -1 || 
+          url.indexOf("hubcloud") !== -1 || 
+          url.indexOf("hubcdn.fans") !== -1) {
+        return "extract";  // Use rule-based extractor
+      }
+      return "stream";
+    }
+
     // Group by episode vs quality
     var episodeLinks = [];
     var qualityLinks = [];
@@ -129,7 +139,8 @@ function getMetaData(link, providerContext) {
       if (sText.toUpperCase().indexOf("EPISODE") !== -1 || sText.toUpperCase().indexOf("EPISOD") !== -1) {
         episodeLinks.push({
           title: sText,
-          link: sHref
+          link: sHref,
+          type: getLinkType(sHref)
         });
       }
       // Check if it's a quality link (480p, 720p, 1080p, etc.)
@@ -138,7 +149,8 @@ function getMetaData(link, providerContext) {
         qualityLinks.push({
           title: sText,
           link: sHref,
-          quality: qMatch ? qMatch[0] : ""
+          quality: qMatch ? qMatch[0] : "",
+          type: getLinkType(sHref)
         });
       }
       // Check if it's a WATCH link (hubstream, hdstream4u)
@@ -147,21 +159,23 @@ function getMetaData(link, providerContext) {
         directLinks.push({
           title: sText || "Watch Online",
           link: sHref,
-          type: "stream"
+          type: getLinkType(sHref)
         });
       }
       // Check for Drive/Instant links (hubdrive, hubcdn)
       else if (sText.toUpperCase().indexOf("DRIVE") !== -1 || sText.toUpperCase().indexOf("INSTANT") !== -1) {
         directLinks.push({
           title: sText || "Download",
-          link: sHref
+          link: sHref,
+          type: getLinkType(sHref)
         });
       }
       // Any other shortener link
       else if (sHref.indexOf("gadgetsweb.xyz") !== -1 || sHref.indexOf("hubdrive") !== -1 || sHref.indexOf("hubcloud") !== -1 || sHref.indexOf("hubcdn") !== -1) {
         directLinks.push({
           title: sText || "Download",
-          link: sHref
+          link: sHref,
+          type: getLinkType(sHref)
         });
       }
     }
@@ -200,10 +214,11 @@ function getMetaData(link, providerContext) {
         title: qualityLinks[q].title,
         quality: qualityLinks[q].quality,
         link: qualityLinks[q].link,
+        type: qualityLinks[q].type,
         directLinks: [{
           title: "Download",
           link: qualityLinks[q].link,
-          type: type
+          type: qualityLinks[q].type
         }]
       });
     }
