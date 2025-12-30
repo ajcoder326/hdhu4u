@@ -1,5 +1,5 @@
 // HDHub4u Stream Module - SYNCHRONOUS VERSION for Rhino JS
-// Extracts streaming links from HubCloud/HubDrive
+// Based on vega-providers implementation with link shortener bypass
 
 var headers = {
   "Cookie": "xla=s4t",
@@ -7,7 +7,7 @@ var headers = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 };
 
-// Utility functions for decoding
+// Utility functions
 function encode(value) {
   return btoa(value.toString());
 }
@@ -44,10 +44,15 @@ function rot13(str) {
 
 function decodeString(encryptedString) {
   try {
+    // First base64 decode
     var decoded = atob(encryptedString);
+    // Second base64 decode
     decoded = atob(decoded);
+    // ROT13 decode
     decoded = rot13(decoded);
+    // Third base64 decode
     decoded = atob(decoded);
+    // Parse JSON
     return JSON.parse(decoded);
   } catch (error) {
     console.error("Error decoding string:", error);
@@ -55,7 +60,59 @@ function decodeString(encryptedString) {
   }
 }
 
-// HubCloud extraction - SYNCHRONOUS
+// Extract redirect link from shortener page
+function getRedirectLinks(link) {
+  try {
+    console.log("getRedirectLinks:", link);
+    var res = axios.get(link, { headers: headers });
+    var resText = res.data;
+
+    // Extract tokens from ck('_wp_http_\d+','<token>') pattern
+    var regex = /ck\('_wp_http_\d+','([^']+)'/g;
+    var combinedString = "";
+    var match;
+
+    while ((match = regex.exec(resText)) !== null) {
+      combinedString += match[1];
+    }
+
+    if (!combinedString) {
+      console.log("No ck tokens found, trying alternate method");
+      // Try to find direct redirect URL
+      var redirectMatch = resText.match(/var\s+url\s*=\s*['"]([^'"]+)['"]/);
+      if (redirectMatch) {
+        return redirectMatch[1];
+      }
+      return link;
+    }
+
+    var decodedString = decode(pen(decode(decode(combinedString))));
+    console.log("Decoded redirect string");
+
+    var data = JSON.parse(decodedString);
+    var token = encode(data.data || "");
+    var blogLink = (data.wp_http1 || "") + "?re=" + token;
+
+    console.log("blogLink:", blogLink);
+
+    // Note: In synchronous version, we can't truly wait
+    // We'll try to fetch directly and hope the timer has passed
+    var blogRes = axios.get(blogLink, { headers: headers });
+    var blogResText = blogRes.data;
+
+    var reurlMatch = blogResText.match(/var reurl = "([^"]+)"/);
+    if (reurlMatch) {
+      return reurlMatch[1];
+    }
+
+    return blogLink;
+  } catch (err) {
+    console.error("Error in getRedirectLinks:", err);
+    return link;
+  }
+}
+
+// HubCloud Extractor - extracts stream links from hubcloud page
 function hubcloudExtractor(link) {
   try {
     console.log("hubcloudExtractor:", link);
@@ -141,65 +198,90 @@ function getStream(link, type, providerContext) {
     console.log("HDHub4u getStream link:", link, "type:", type);
 
     var hubdriveLink = "";
-    var streamLinks = [];
 
-    // Check if it's a hubdrive link directly
+    // Check if it's already a hubdrive link
     if (link.indexOf("hubdrive") !== -1) {
       var hubdriveRes = axios.get(link, { headers: headers });
       var hubdriveText = hubdriveRes.data;
       var $ = cheerio.load(hubdriveText);
       hubdriveLink = $(".btn.btn-primary.btn-user.btn-success1.m-1").attr("href") || link;
-    } else if (link.indexOf("hubcloud") !== -1) {
-      // Direct hubcloud link
+    }
+    // Check if it's a hubcloud link directly
+    else if (link.indexOf("hubcloud") !== -1) {
       hubdriveLink = link;
-    } else {
-      // Need to decode encrypted link from page
-      var res = axios.get(link, { headers: headers });
-      var text = res.data;
-      var $ = cheerio.load(text);
+    }
+    // Check if it's a gadgetsweb.xyz shortener link  
+    else if (link.indexOf("gadgetsweb.xyz") !== -1 || link.indexOf("?id=") !== -1) {
+      console.log("Processing shortener link:", link);
+      // For shortener links, we need to decode or redirect
+      var shortRes = axios.get(link, { headers: headers });
+      var shortText = shortRes.data;
 
-      // Try multiple methods to find download links
-
-      // Method 1: Direct hubcloud/hubdrive links on page
-      var directLink = $('a[href*="hubcloud"]').attr("href") ||
-        $('a[href*="hubdrive"]').attr("href") ||
-        $('a[href*="hubcdn"]').attr("href");
-
-      if (directLink) {
-        hubdriveLink = directLink;
-      }
-
-      // Method 2: Look for encoded links
-      if (!hubdriveLink) {
-        var encryptedParts = text.split("s('o','");
-        if (encryptedParts.length > 1) {
-          var encryptedString = encryptedParts[1].split("',180")[0];
-          if (encryptedString) {
-            var decodedData = decodeString(encryptedString);
-            if (decodedData && decodedData.o) {
-              hubdriveLink = atob(decodedData.o);
-            }
+      // Look for encoded string or redirect
+      var encryptedParts = shortText.split("s('o','");
+      if (encryptedParts.length > 1) {
+        var encryptedString = encryptedParts[1].split("',180")[0];
+        if (encryptedString) {
+          var decodedData = decodeString(encryptedString);
+          if (decodedData && decodedData.o) {
+            var decodedLink = atob(decodedData.o);
+            console.log("Decoded shortener to:", decodedLink);
+            hubdriveLink = getRedirectLinks(decodedLink);
           }
         }
       }
 
-      // Method 3: Find quality-based links
+      // Fallback: try to find hubcloud/hubdrive link in page
+      if (!hubdriveLink) {
+        var $short = cheerio.load(shortText);
+        hubdriveLink = $short('a[href*="hubcloud"]').attr("href") ||
+          $short('a[href*="hubdrive"]').attr("href") ||
+          $short('a[href*="hubcdn"]').attr("href") || "";
+      }
+    }
+    // Regular link - need to parse the page
+    else {
+      var res = axios.get(link, { headers: headers });
+      var text = res.data;
+      var $ = cheerio.load(text);
+
+      // Method 1: Look for encoded string
+      var encryptedParts = text.split("s('o','");
+      if (encryptedParts.length > 1) {
+        var encryptedString = encryptedParts[1].split("',180")[0];
+        if (encryptedString) {
+          var decodedData = decodeString(encryptedString);
+          if (decodedData && decodedData.o) {
+            var decodedLink = atob(decodedData.o);
+            hubdriveLink = getRedirectLinks(decodedLink);
+          }
+        }
+      }
+
+      // Method 2: Direct hubcloud/hubdrive links on page
+      if (!hubdriveLink) {
+        hubdriveLink = $('a[href*="hubcloud"]').attr("href") ||
+          $('a[href*="hubdrive"]').attr("href") ||
+          $('a[href*="hubcdn"]').attr("href") || "";
+      }
+
+      // Method 3: Look for quality-based links
       if (!hubdriveLink) {
         hubdriveLink = $('a:contains("1080p")').attr("href") ||
           $('a:contains("720p")').attr("href") ||
           $('a:contains("480p")').attr("href") ||
-          $('h3:contains("1080p")').find("a").attr("href");
+          $('h3:contains("1080p")').find("a").attr("href") || "";
       }
+    }
 
-      if (!hubdriveLink) {
-        console.log("No download link found");
-        return [];
-      }
+    if (!hubdriveLink) {
+      console.log("No download link found");
+      return [];
     }
 
     console.log("hubdriveLink:", hubdriveLink);
 
-    // If hubdrive, fetch it again to get final link
+    // If hubdrive, fetch it to get final hubcloud link
     if (hubdriveLink.indexOf("hubdrive") !== -1) {
       var hubdriveRes2 = axios.get(hubdriveLink, { headers: headers });
       var hubdriveText2 = hubdriveRes2.data;
@@ -210,13 +292,17 @@ function getStream(link, type, providerContext) {
       }
     }
 
-    // Get final hubcloud link from hubdrive page if needed
+    // Get hubcloud link from meta refresh if present
     if (hubdriveLink.indexOf("hubcloud") === -1 && hubdriveLink.indexOf("hubcdn") === -1) {
-      var hubdriveLinkRes = axios.get(hubdriveLink, { headers: headers });
-      var hubcloudText = hubdriveLinkRes.data;
-      var metaMatch = hubcloudText.match(/<META HTTP-EQUIV="refresh" content="0; url=([^"]+)">/i);
-      if (metaMatch && metaMatch[1]) {
-        hubdriveLink = metaMatch[1];
+      try {
+        var hubdriveLinkRes = axios.get(hubdriveLink, { headers: headers });
+        var hubcloudText = hubdriveLinkRes.data;
+        var metaMatch = hubcloudText.match(/<META HTTP-EQUIV="refresh" content="0; url=([^"]+)">/i);
+        if (metaMatch && metaMatch[1]) {
+          hubdriveLink = metaMatch[1];
+        }
+      } catch (e) {
+        console.log("Error getting meta refresh:", e);
       }
     }
 
