@@ -184,8 +184,10 @@ function getMetaData(link, providerContext) {
       // Add each episode group to linkList
       for (var epKey in episodeGroups) {
         if (episodeGroups.hasOwnProperty(epKey)) {
+          var firstLink = episodeGroups[epKey][0] ? episodeGroups[epKey][0].link : "";
           linkList.push({
             title: "Episode " + epKey,
+            link: firstLink,
             directLinks: episodeGroups[epKey]
           });
         }
@@ -197,6 +199,7 @@ function getMetaData(link, providerContext) {
       linkList.push({
         title: qualityLinks[q].title,
         quality: qualityLinks[q].quality,
+        link: qualityLinks[q].link,
         directLinks: [{
           title: "Download",
           link: qualityLinks[q].link,
@@ -209,14 +212,18 @@ function getMetaData(link, providerContext) {
     if (directLinks.length > 0) {
       // If we already have quality or episode links, add directLinks as a separate section
       if (linkList.length > 0) {
+        var firstDirectLink = directLinks[0] ? directLinks[0].link : "";
         linkList.push({
           title: "Additional Links",
+          link: firstDirectLink,
           directLinks: directLinks
         });
       } else {
         // No episode/quality links, use directLinks as main links
+        var firstDL = directLinks[0] ? directLinks[0].link : "";
         linkList.push({
           title: title || "Downloads",
+          link: firstDL,
           directLinks: directLinks
         });
       }
@@ -249,8 +256,10 @@ function getMetaData(link, providerContext) {
       }
 
       if (directLinks.length > 0) {
+        var firstFallbackLink = directLinks[0] ? directLinks[0].link : "";
         linkList.push({
           title: title || "Episodes",
+          link: firstFallbackLink,
           directLinks: directLinks
         });
       }
@@ -276,6 +285,7 @@ function getMetaData(link, providerContext) {
           linkList.push({
             title: qText,
             quality: quality,
+            link: qHref,
             directLinks: [{
               title: "Download",
               link: qHref,
