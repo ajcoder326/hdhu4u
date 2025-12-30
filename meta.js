@@ -110,8 +110,8 @@ function getMetaData(link, providerContext) {
     var linkList = [];
     var directLinks = [];
 
-    // NEW METHOD: Find gadgetsweb.xyz and hubstream.art links (shortener links)
-    var shortenerLinks = $('a[href*="gadgetsweb.xyz"], a[href*="hubstream"], a[href*="hubdrive"], a[href*="hubcloud"]');
+    // Find ALL streaming/download provider links
+    var shortenerLinks = $('a[href*="gadgetsweb.xyz"], a[href*="hubstream"], a[href*="hubdrive"], a[href*="hubcloud"], a[href*="hubcdn.fans"], a[href*="hdstream4u.com"]');
     console.log("Shortener links found:", shortenerLinks.length);
 
     // Group by episode vs quality
@@ -141,13 +141,24 @@ function getMetaData(link, providerContext) {
           quality: qMatch ? qMatch[0] : ""
         });
       }
-      // Check if it's a WATCH link (hubstream)
-      else if (sText.toUpperCase().indexOf("WATCH") !== -1) {
-        // Skip watch links for now, we'll use download links
-        continue;
+      // Check if it's a WATCH link (hubstream, hdstream4u)
+      else if (sText.toUpperCase().indexOf("WATCH") !== -1 || sHref.indexOf("hdstream4u") !== -1) {
+        // Include streaming links for watching
+        directLinks.push({
+          title: sText || "Watch Online",
+          link: sHref,
+          type: "stream"
+        });
+      }
+      // Check for Drive/Instant links (hubdrive, hubcdn)
+      else if (sText.toUpperCase().indexOf("DRIVE") !== -1 || sText.toUpperCase().indexOf("INSTANT") !== -1) {
+        directLinks.push({
+          title: sText || "Download",
+          link: sHref
+        });
       }
       // Any other shortener link
-      else if (sHref.indexOf("gadgetsweb.xyz") !== -1 || sHref.indexOf("hubdrive") !== -1 || sHref.indexOf("hubcloud") !== -1) {
+      else if (sHref.indexOf("gadgetsweb.xyz") !== -1 || sHref.indexOf("hubdrive") !== -1 || sHref.indexOf("hubcloud") !== -1 || sHref.indexOf("hubcdn") !== -1) {
         directLinks.push({
           title: sText || "Download",
           link: sHref
@@ -157,12 +168,28 @@ function getMetaData(link, providerContext) {
 
     console.log("Episode links:", episodeLinks.length, "Quality links:", qualityLinks.length, "Direct links:", directLinks.length);
 
-    // Add episode links to linkList
+    // For series with episode links, group them properly
     if (episodeLinks.length > 0) {
-      linkList.push({
-        title: title || "Episodes",
-        directLinks: episodeLinks
-      });
+      // Group episode links by episode number
+      var episodeGroups = {};
+      for (var ei = 0; ei < episodeLinks.length; ei++) {
+        var epMatch = episodeLinks[ei].title.match(/episode\s*(\d+)/i);
+        var epNum = epMatch ? epMatch[1] : "EP" + (ei + 1);
+        if (!episodeGroups[epNum]) {
+          episodeGroups[epNum] = [];
+        }
+        episodeGroups[epNum].push(episodeLinks[ei]);
+      }
+      
+      // Add each episode group to linkList
+      for (var epKey in episodeGroups) {
+        if (episodeGroups.hasOwnProperty(epKey)) {
+          linkList.push({
+            title: "Episode " + epKey,
+            directLinks: episodeGroups[epKey]
+          });
+        }
+      }
     }
 
     // Add quality links to linkList
@@ -178,12 +205,21 @@ function getMetaData(link, providerContext) {
       });
     }
 
-    // Add direct links if no episode/quality found
-    if (linkList.length === 0 && directLinks.length > 0) {
-      linkList.push({
-        title: title || "Downloads",
-        directLinks: directLinks
-      });
+    // Add direct links (Drive/Instant/Watch) if they exist
+    if (directLinks.length > 0) {
+      // If we already have quality or episode links, add directLinks as a separate section
+      if (linkList.length > 0) {
+        linkList.push({
+          title: "Additional Links",
+          directLinks: directLinks
+        });
+      } else {
+        // No episode/quality links, use directLinks as main links
+        linkList.push({
+          title: title || "Downloads",
+          directLinks: directLinks
+        });
+      }
     }
 
     // FALLBACK: Original method for EPiSODE strong tags
