@@ -110,67 +110,122 @@ function getMetaData(link, providerContext) {
     var linkList = [];
     var directLinks = [];
 
-    // Method 1: Find Episode links (for series)
-    var episodeStrongs = $('strong:contains("EPiSODE")');
-    console.log("Episode strong count:", episodeStrongs.length);
+    // NEW METHOD: Find gadgetsweb.xyz and hubstream.art links (shortener links)
+    var shortenerLinks = $('a[href*="gadgetsweb.xyz"], a[href*="hubstream"], a[href*="hubdrive"], a[href*="hubcloud"]');
+    console.log("Shortener links found:", shortenerLinks.length);
 
-    for (var e = 0; e < episodeStrongs.length && e < 50; e++) {
-      var epElement = episodeStrongs.eq(e);
-      var epTitle = epElement.text().trim();
+    // Group by episode vs quality
+    var episodeLinks = [];
+    var qualityLinks = [];
 
-      var parent = epElement.parent();
-      var grandParent = parent.parent();
-      var greatGrandParent = grandParent.parent();
+    for (var s = 0; s < shortenerLinks.length && s < 100; s++) {
+      var sAnchor = shortenerLinks.eq(s);
+      var sText = sAnchor.text().trim();
+      var sHref = sAnchor.attr("href") || "";
 
-      var episodeLink =
-        parent.find("a").attr("href") ||
-        grandParent.find("a").attr("href") ||
-        greatGrandParent.next().find("a").attr("href") ||
-        greatGrandParent.next().next().find("a").attr("href") ||
-        "";
+      if (!sHref || sHref.indexOf("http") !== 0) continue;
 
-      if (episodeLink && episodeLink.indexOf("http") === 0) {
+      // Check if it's an episode link
+      if (sText.toUpperCase().indexOf("EPISODE") !== -1 || sText.toUpperCase().indexOf("EPISOD") !== -1) {
+        episodeLinks.push({
+          title: sText,
+          link: sHref
+        });
+      }
+      // Check if it's a quality link (480p, 720p, 1080p, etc.)
+      else if (sText.match(/480|720|1080|2160|4K/i)) {
+        qualityLinks.push({
+          title: sText,
+          link: sHref,
+          quality: sText.match(/\b(480p|720p|1080p|2160p|4K)\b/i)?.[0] || ""
+        });
+      }
+      // Check if it's a WATCH link (hubstream)
+      else if (sText.toUpperCase().indexOf("WATCH") !== -1) {
+        // Skip watch links for now, we'll use download links
+        continue;
+      }
+      // Any other shortener link
+      else if (sHref.indexOf("gadgetsweb.xyz") !== -1 || sHref.indexOf("hubdrive") !== -1 || sHref.indexOf("hubcloud") !== -1) {
         directLinks.push({
-          title: epTitle,
-          link: episodeLink
+          title: sText || "Download",
+          link: sHref
         });
       }
     }
 
-    // Method 2: Find Episode links using anchor tags
-    if (directLinks.length === 0) {
-      var episodeAnchors = container.find('a:contains("EPiSODE")');
-      console.log("Episode anchor count:", episodeAnchors.length);
+    console.log("Episode links:", episodeLinks.length, "Quality links:", qualityLinks.length, "Direct links:", directLinks.length);
 
-      for (var ea = 0; ea < episodeAnchors.length && ea < 50; ea++) {
-        var anchor = episodeAnchors.eq(ea);
-        var anchorText = anchor.text().trim().toUpperCase();
-        var anchorHref = anchor.attr("href");
+    // Add episode links to linkList
+    if (episodeLinks.length > 0) {
+      linkList.push({
+        title: title || "Episodes",
+        directLinks: episodeLinks
+      });
+    }
 
-        if (anchorHref && anchorHref.indexOf("http") === 0) {
+    // Add quality links to linkList
+    for (var q = 0; q < qualityLinks.length; q++) {
+      linkList.push({
+        title: qualityLinks[q].title,
+        quality: qualityLinks[q].quality,
+        directLinks: [{
+          title: "Download",
+          link: qualityLinks[q].link,
+          type: type
+        }]
+      });
+    }
+
+    // Add direct links if no episode/quality found
+    if (linkList.length === 0 && directLinks.length > 0) {
+      linkList.push({
+        title: title || "Downloads",
+        directLinks: directLinks
+      });
+    }
+
+    // FALLBACK: Original method for EPiSODE strong tags
+    if (linkList.length === 0) {
+      var episodeStrongs = $('strong:contains("EPiSODE")');
+      console.log("Episode strong count:", episodeStrongs.length);
+
+      for (var e = 0; e < episodeStrongs.length && e < 50; e++) {
+        var epElement = episodeStrongs.eq(e);
+        var epTitle = epElement.text().trim();
+        var parent = epElement.parent();
+        var grandParent = parent.parent();
+        var greatGrandParent = grandParent.parent();
+
+        var episodeLink =
+          parent.find("a").attr("href") ||
+          grandParent.find("a").attr("href") ||
+          greatGrandParent.next().find("a").attr("href") ||
+          greatGrandParent.next().next().find("a").attr("href") || "";
+
+        if (episodeLink && episodeLink.indexOf("http") === 0) {
           directLinks.push({
-            title: anchorText,
-            link: anchorHref
+            title: epTitle,
+            link: episodeLink
           });
         }
       }
+
+      if (directLinks.length > 0) {
+        linkList.push({
+          title: title || "Episodes",
+          directLinks: directLinks
+        });
+      }
     }
 
-    if (directLinks.length > 0) {
-      linkList.push({
-        title: title || "Episodes",
-        directLinks: directLinks
-      });
-      console.log("Found", directLinks.length, "episode links");
-    }
+    // FALLBACK: Look for any quality links
+    if (linkList.length === 0) {
+      var qualityAnchors = container.find('a:contains("480"), a:contains("720"), a:contains("1080"), a:contains("2160"), a:contains("4K")');
+      console.log("Quality anchor count:", qualityAnchors.length);
 
-    // Method 3: Find Quality-based download links
-    if (directLinks.length === 0) {
-      var qualityLinks = container.find('a:contains("480"), a:contains("720"), a:contains("1080"), a:contains("2160"), a:contains("4K")');
-      console.log("Quality link count:", qualityLinks.length);
-
-      for (var q = 0; q < qualityLinks.length && q < 20; q++) {
-        var qAnchor = qualityLinks.eq(q);
+      for (var qa = 0; qa < qualityAnchors.length && qa < 20; qa++) {
+        var qAnchor = qualityAnchors.eq(qa);
         var qText = qAnchor.text().trim();
         var qHref = qAnchor.attr("href");
 
@@ -188,29 +243,6 @@ function getMetaData(link, providerContext) {
               title: "Download",
               link: qHref,
               type: type
-            }]
-          });
-        }
-      }
-      console.log("Found", linkList.length, "quality links");
-    }
-
-    // Method 4: Find HubCloud/HubDrive direct links
-    if (linkList.length === 0) {
-      var hubLinks = container.find('a[href*="hubcloud"], a[href*="hubdrive"], a[href*="hubcdn"]');
-      console.log("Hub link count:", hubLinks.length);
-
-      for (var h = 0; h < hubLinks.length && h < 10; h++) {
-        var hubAnchor = hubLinks.eq(h);
-        var hubText = hubAnchor.text().trim() || "Download";
-        var hubHref = hubAnchor.attr("href");
-
-        if (hubHref) {
-          linkList.push({
-            title: hubText,
-            directLinks: [{
-              title: "Stream",
-              link: hubHref
             }]
           });
         }
