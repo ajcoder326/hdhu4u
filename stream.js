@@ -1,109 +1,110 @@
-// HDHub4u Stream Module - Returns automation rules for hidden browser extraction
-// When user clicks a link, the app will use these rules to automate the extraction
+// HDHub4u Stream Module - DOM-only extraction
+// 
+// FLOW (no clicking, just DOM parsing at each step):
+// 1. hubdrive page → extract hubcloud URL from DOM
+// 2. hubcloud page → extract gamerxyt URL from DOM (#download href)
+// 3. gamerxyt page → extract all download links from DOM
+//
+// This is FAST because we never wait for ads or countdowns!
 
 var headers = {
-  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+  "User-Agent": "Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
 };
 
 /**
  * Get streams for a given link
- * Returns automation rules that the hidden browser will execute
+ * Returns DOM extraction rules for the hidden browser
  */
 function getStreams(link, type) {
   console.log("getStreams called with:", link);
   
-  // Determine what type of link this is and return appropriate automation rules
-  
-  // HBLinks page - need to extract hubcloud link first
-  if (link.indexOf("hblinks.dad") !== -1) {
-    return getHblinksAutomation(link);
+  // HubDrive page - full 3-step extraction
+  if (link.indexOf("hubdrive.") !== -1) {
+    return getHubdriveExtraction(link);
   }
   
-  // HubCloud page - this is where download button is
-  if (link.indexOf("hubcloud.foo") !== -1 || 
-      link.indexOf("hubcloud.fyi") !== -1 || 
-      link.indexOf("hubcloud.lol") !== -1) {
-    return getHubcloudAutomation(link);
+  // HubCloud page - 2-step extraction (skip first step)
+  if (link.indexOf("hubcloud.") !== -1) {
+    return getHubcloudExtraction(link);
   }
   
-  // HubDrive page
-  if (link.indexOf("hubdrive.space") !== -1) {
-    return getHubdriveAutomation(link);
+  // HBLinks shortener - try to resolve first, then extract
+  if (link.indexOf("hblinks.") !== -1) {
+    return getHblinksExtraction(link);
   }
   
-  // HubCDN page
-  if (link.indexOf("hubcdn.fans") !== -1) {
-    return getHubcdnAutomation(link);
+  // GamerXYT final page - just extract links
+  if (link.indexOf("gamerxyt.") !== -1) {
+    return getFinalPageExtraction(link);
   }
   
-  // Unknown - return as direct link
-  console.log("Unknown link type, returning as direct");
-  return [{
-    server: "Direct",
-    link: link,
-    type: "direct"
-  }];
+  // Unknown - try as hubdrive-style (3 steps)
+  console.log("Unknown link type, trying 3-step extraction");
+  return getHubdriveExtraction(link);
 }
 
 /**
- * Automation for hblinks.dad pages
- * Flow: hblinks → extract hubcloud link → hubcloud → click button → gamerxyt → extract final links
+ * Full 3-step DOM extraction for hubdrive pages
+ * Step 1: hubdrive → find hubcloud link in DOM
+ * Step 2: hubcloud → find #download href in DOM
+ * Step 3: gamerxyt → extract all download links
  */
-function getHblinksAutomation(link) {
-  console.log("Creating HBLinks automation for:", link);
+function getHubdriveExtraction(link) {
+  console.log("Creating 3-step DOM extraction for hubdrive:", link);
   
-  // First, fetch the hblinks page to get the hubcloud URL
-  try {
-    var response = axios.get(link, { headers: headers });
-    var html = response.data;
-    var $ = cheerio.load(html);
-    
-    // Find the hubcloud link
-    var hubcloudLink = $('a[href*="hubcloud"]').first().attr("href");
-    
-    if (hubcloudLink) {
-      console.log("Found hubcloud link:", hubcloudLink);
-      // Return automation for the hubcloud page
-      return getHubcloudAutomation(hubcloudLink);
-    }
-    
-    console.log("No hubcloud link found on hblinks page");
-    return [];
-  } catch (e) {
-    console.error("Error fetching hblinks:", e);
-    return [];
-  }
-}
-
-/**
- * Automation for hubcloud.foo pages
- * This is the main extraction - click download button → go to gamerxyt → extract final URLs
- */
-function getHubcloudAutomation(link) {
-  console.log("Creating HubCloud automation for:", link);
-  
-  // Return the link with automation rules
-  // The hidden browser will execute these steps
   return [{
-    server: "HubCloud",
+    server: "Auto Extract",
     link: link,
     type: "automate",
     automation: {
       steps: [
+        // Step 1: Extract HubCloud URL from hubdrive page
         {
-          action: "waitAndClick",
-          selector: "#download",
-          matchUrl: "hubcloud",
-          timeout: 10000
+          action: "extractUrl",
+          selectors: [
+            "a[href*='hubcloud']",
+            "a.btn-success[href*='hubcloud']",
+            "a.btn[href*='hubcloud']"
+          ],
+          patterns: ["hubcloud", "HubCloud", "HUBCLOUD"]
         },
+        // Step 2: Extract download page URL from hubcloud
+        {
+          action: "extractUrl",
+          selectors: [
+            "#download",
+            "a#download",
+            "a[href*='gamerxyt']",
+            "a[href*='hubcloud.php']"
+          ],
+          patterns: ["gamerxyt", "hubcloud.php"]
+        },
+        // Step 3: Extract all download links from final page
         {
           action: "extractLinks",
-          selector: "a.btn-success, a.btn-primary, a[href*='pixeldrain'], a[href*='.zip'], a[href*='.mkv']",
-          matchUrl: "gamerxyt",
-          filter: [".zip", ".mkv", ".mp4", "pixeldrain", "fukggl", "firecdn", "fsl.", "cdn.", "hubcdn"]
-        },
-        {
-          action: "complete"
+          selectors: [
+            "a.btn-success",
+            "a.btn-primary",
+            "a.btn-danger",
+            "a.btn-info",
+            "a[href*='.mkv']",
+            "a[href*='.mp4']",
+            "a[href*='.zip']",
+            "a[href*='pixel']",
+            "a[href*='fsl']",
+            "a[href*='hubcdn']",
+            "a[href*='fukggl']",
+            "a[href*='firecdn']"
+          ],
+          excludePatterns: [
+            "t.me",
+            "telegram",
+            "facebook",
+            "twitter",
+            "instagram",
+            "javascript:",
+            "#"
+          ]
         }
       ]
     }
@@ -111,54 +112,134 @@ function getHubcloudAutomation(link) {
 }
 
 /**
- * Automation for hubdrive.space pages
+ * 2-step DOM extraction for hubcloud pages (skip hubdrive step)
  */
-function getHubdriveAutomation(link) {
-  console.log("Creating HubDrive automation for:", link);
+function getHubcloudExtraction(link) {
+  console.log("Creating 2-step DOM extraction for hubcloud:", link);
   
-  // First fetch the page to get the hubcloud link
+  return [{
+    server: "HubCloud",
+    link: link,
+    type: "automate",
+    automation: {
+      steps: [
+        // Step 1: Extract download page URL from hubcloud
+        {
+          action: "extractUrl",
+          selectors: [
+            "#download",
+            "a#download",
+            "a[href*='gamerxyt']",
+            "a[href*='hubcloud.php']"
+          ],
+          patterns: ["gamerxyt", "hubcloud.php"]
+        },
+        // Step 2: Extract all download links from final page
+        {
+          action: "extractLinks",
+          selectors: [
+            "a.btn-success",
+            "a.btn-primary",
+            "a.btn-danger",
+            "a.btn-info",
+            "a[href*='.mkv']",
+            "a[href*='.mp4']",
+            "a[href*='.zip']",
+            "a[href*='pixel']",
+            "a[href*='fsl']",
+            "a[href*='hubcdn']",
+            "a[href*='fukggl']",
+            "a[href*='firecdn']"
+          ],
+          excludePatterns: [
+            "t.me",
+            "telegram",
+            "facebook",
+            "twitter",
+            "instagram",
+            "javascript:",
+            "#"
+          ]
+        }
+      ]
+    }
+  }];
+}
+
+/**
+ * Extraction for hblinks shortener
+ * Try to resolve via axios first, fallback to DOM extraction
+ */
+function getHblinksExtraction(link) {
+  console.log("Processing hblinks shortener:", link);
+  
   try {
-    var response = axios.get(link, { headers: headers });
+    // Try to fetch and find the hubdrive/hubcloud link
+    var response = axios.get(link, { headers: headers, timeout: 10000 });
     var html = response.data;
     var $ = cheerio.load(html);
     
-    // Find the HubCloud Server button
-    var hubcloudLink = $('a.btn:contains("HubCloud")').attr("href") || 
-                       $('a[href*="hubcloud"]').first().attr("href");
+    // Look for hubdrive or hubcloud link
+    var nextLink = $('a[href*="hubdrive"]').first().attr("href") ||
+                   $('a[href*="hubcloud"]').first().attr("href");
     
-    if (hubcloudLink) {
-      console.log("Found hubcloud link from hubdrive:", hubcloudLink);
-      return getHubcloudAutomation(hubcloudLink);
+    if (nextLink) {
+      console.log("Resolved hblinks to:", nextLink);
+      
+      if (nextLink.indexOf("hubdrive") !== -1) {
+        return getHubdriveExtraction(nextLink);
+      } else if (nextLink.indexOf("hubcloud") !== -1) {
+        return getHubcloudExtraction(nextLink);
+      }
     }
     
-    console.log("No hubcloud link found on hubdrive page");
-    return [];
+    // Fallback: return link with 3-step extraction
+    console.log("Could not resolve hblinks, trying DOM extraction");
+    return getHubdriveExtraction(link);
+    
   } catch (e) {
-    console.error("Error fetching hubdrive:", e);
-    return [];
+    console.error("Error resolving hblinks:", e);
+    return getHubdriveExtraction(link);
   }
 }
 
 /**
- * Automation for hubcdn.fans pages
+ * Direct extraction from final page (gamerxyt)
  */
-function getHubcdnAutomation(link) {
-  console.log("Creating HubCDN automation for:", link);
+function getFinalPageExtraction(link) {
+  console.log("Creating direct link extraction for final page:", link);
   
   return [{
-    server: "HubCDN",
+    server: "Direct",
     link: link,
     type: "automate",
     automation: {
       steps: [
         {
           action: "extractLinks",
-          selector: "a[href*='.mkv'], a[href*='.zip'], a[href*='download'], a.btn",
-          matchUrl: "hubcdn",
-          filter: [".zip", ".mkv", ".mp4", "download"]
-        },
-        {
-          action: "complete"
+          selectors: [
+            "a.btn-success",
+            "a.btn-primary",
+            "a.btn-danger",
+            "a.btn-info",
+            "a[href*='.mkv']",
+            "a[href*='.mp4']",
+            "a[href*='.zip']",
+            "a[href*='pixel']",
+            "a[href*='fsl']",
+            "a[href*='hubcdn']",
+            "a[href*='fukggl']",
+            "a[href*='firecdn']"
+          ],
+          excludePatterns: [
+            "t.me",
+            "telegram",
+            "facebook",
+            "twitter",
+            "instagram",
+            "javascript:",
+            "#"
+          ]
         }
       ]
     }
