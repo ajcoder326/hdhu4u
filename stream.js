@@ -96,6 +96,18 @@ function getHubdriveExtraction(link) {
             "a[href*='fukggl']",
             "a[href*='firecdn']"
           ],
+          // Server patterns to identify valid download links
+          serverPatterns: [
+            "pixel",
+            "fsl",
+            "hubcdn",
+            "fukggl",
+            "firecdn",
+            "cdn.",
+            ".mkv",
+            ".mp4",
+            ".zip"
+          ],
           excludePatterns: [
             "t.me",
             "telegram",
@@ -150,6 +162,17 @@ function getHubcloudExtraction(link) {
             "a[href*='hubcdn']",
             "a[href*='fukggl']",
             "a[href*='firecdn']"
+          ],
+          serverPatterns: [
+            "pixel",
+            "fsl",
+            "hubcdn",
+            "fukggl",
+            "firecdn",
+            "cdn.",
+            ".mkv",
+            ".mp4",
+            ".zip"
           ],
           excludePatterns: [
             "t.me",
@@ -230,6 +253,17 @@ function getFinalPageExtraction(link) {
             "a[href*='hubcdn']",
             "a[href*='fukggl']",
             "a[href*='firecdn']"
+          ],
+          serverPatterns: [
+            "pixel",
+            "fsl",
+            "hubcdn",
+            "fukggl",
+            "firecdn",
+            "cdn.",
+            ".mkv",
+            ".mp4",
+            ".zip"
           ],
           excludePatterns: [
             "t.me",
